@@ -1,0 +1,266 @@
+---
+title: "Analysis"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Goals 
+
+- Explore and plot seasonal visitation trends for Texas state parks
+- Compare visitation totals from pre-pandemic years versus during pandemic
+- Calculate percent differences between average monthly visits year to year
+- Find which state parks were most popular in terms of number of visitors
+- Which parks experienced the biggest increase/decrease in visits
+- Camping rates vs. non-camping 
+
+## Setup
+
+```{r setup}
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(plotly)
+library(clipr)
+library(dplyr)
+```
+
+## Import
+
+Importing from previous notebook
+
+```{r import}
+visits <- read_rds("data-processed/02-tpwd-visits.rds")
+
+visits 
+```
+
+## Filter out Region Subtotal rows
+
+Only want rows that are state parks and not region subtotals. Using `str_detect` function to do this.
+
+```{r filter-subtotal}
+park_visits <- visits %>% 
+  filter(!str_detect(park_site, "Subtotal")) 
+
+park_visits
+```
+
+## Total Amount of Visits Per Year
+
+With 9.4 million visits, 2017 had the most number of total visits across all state parks since 2016. 2015 and 2021 aren't full calendar years in the data, and 2020 was a pandemic year.
+
+Difference between total and paid visits is that total visits include elderly visitors, veterans, and children 12 and under.
+
+```{r total-yr}
+visits_yr <- park_visits %>% 
+  group_by(yr) %>% 
+  summarize(
+    total_visits = sum(total_visits)
+  ) %>% 
+  arrange(total_visits %>% desc())
+
+visits_yr
+```
+
+## Preparation for Seasonal Trends Plot
+
+Create summary table that has columns for year, month, and total visits. Filter out 2015 values because not a full calendar year. 
+
+```{r yrmo}
+visits_yrmo <- park_visits %>% 
+  filter(!yr == "2015") %>% 
+  group_by(yr, mo) %>% 
+  summarize(
+    total_visits = sum(total_visits)
+  ) 
+
+visits_yrmo
+```
+
+
+## Plot Seasonal Visitation Trends
+
+Data point: 2020 had the highest number of visits during the off-season months of September, October, November, December compared to the four previous years. Visitation numbers for summer 2020 were lower than usual, most likely due to park closures. 
+
+
+```{r seasonal-plot}
+visits_yrmo %>% 
+  ggplot(aes(x = mo, y = total_visits)) +
+  geom_line(aes(group = yr, color = as.character(yr))) +
+  scale_y_continuous(labels = comma) +
+  labs(
+    title = "Seasonal Visitation Trends for Texas State Parks, Split by Year",
+    subtitle = "Parks temporarily closed in April 2020, with gradual limited reopening in following months",
+    caption = "Visitation data provided by Texas Parks and Wildlife Department",
+    x = "Month",
+    y = "Total Visits",
+    color = "Year"
+  )
+```
+
+
+## Finding most visited parks by year and month
+
+The largest number of total visits to a state park in one month since September 2015 was 106,000 visitors to Garner State Park in July 2021, surpassing its previous record 5 years earlier in July 2016.
+
+```{r most-popular}
+park_visits %>% 
+  group_by(park_site, yr, mo) %>% 
+  summarize(
+    total_visits = sum(total_visits)
+  ) %>% 
+  arrange(total_visits %>% desc())
+```
+
+## Average monthly visits to Garner State Park
+
+Excluding 2021 and 2015 because they are not full calendar years, 2020 had the highest average monthly visits to Garner State Park, at roughly 38,000 visitors a month.  
+
+```{r garner-avg}
+park_visits %>% 
+  filter(park_site == "GARNER STATE PARK") %>% 
+  group_by(yr) %>% 
+  summarise(
+    avg_monthly_visit = mean(total_visits) %>% round()
+  ) %>% 
+  arrange(avg_monthly_visit %>% desc())
+```
+
+
+## Top 10 most visited parks since September 2015
+
+Garner State Park has had over 2.6 million visitors since September 2015, the most out of any Texas state park during that period. Palo Duro Canyon State Park comes in a close second with 2.4 million visitors.
+
+```{r top-10}
+top_10 <- park_visits %>% 
+  group_by(park_site) %>% 
+  summarize(
+    total_visits = sum(total_visits)
+  ) %>% 
+  arrange(total_visits %>% desc()) %>% 
+  head(10)
+
+top_10
+```
+
+## Plot top 10 visited parks using Datawrapper
+
+```{r datawrapper}
+top_10 %>% write_clip(allow_non_interactive = TRUE)
+```
+
+[Here is my chart from Datawrapper.](https://www.datawrapper.de/_/NXLyW/)
+
+
+## Pivot wider to calculate percent change
+
+Need to calculate percent difference between 2019 total visits and 2020 total visits in order to find out which parks gained (or lost) the most amount of visitors as a result of the pandemic. Created new column for % difference and filtered out the rows where there were 0 visitors in 2020 (or essentially -100% change).
+
+```{r percent-diff}
+visits_change <- park_visits %>% 
+  group_by(park_site, yr) %>% 
+  summarize(
+    sum_visits = sum(total_visits) %>% round()
+  ) %>% 
+  pivot_wider(names_from = yr, values_from = sum_visits) %>% 
+  mutate(
+    diff_19_20 = ((`2020` - `2019`) / `2019`) * 100
+  ) %>% 
+  arrange(diff_19_20 %>% desc()) %>% 
+  filter(diff_19_20 != "-100")
+
+visits_change
+
+```
+
+### Create separate list for parks that gained the most visitors
+
+Pulled top 5 parks that grew the most by arranging the percent difference column in the summary table above in descending order. Used the `%in%` and `pivot_longer` functions. Filtered out the percent change rows because the goal is to plot this data.
+
+```{r top-winners}
+top_parks_gain <- c("BIG BEND RANCH STATE PARK", "LAKE SOMERVILLE BIRCH CREEK STATE PARK","HILL COUNTRY STATE NATURAL AREA", "LAKE WHITNEY STATE PARK", "DEVILS RIVER STATE NATURAL AREA" )
+
+top_winners <- visits_change %>% 
+filter(park_site %in% top_parks_gain) %>% 
+pivot_longer(!park_site, names_to = "yr", values_to = "total_visits") %>% 
+filter(yr != "diff_19_20")
+
+top_winners
+```
+
+## Plot the top 5 biggest gainers
+
+Using the summary table above, creating a line chart over the years that shows the rapid growth of these top 5 parks during the beginning of the pandemic. Visits are pulled from total visits.
+
+```{r winners-plot}
+top_winners %>% 
+  ggplot(aes(x = yr, y = total_visits)) +
+  geom_line(aes(group = park_site, color = as.character(park_site))) +
+  scale_y_continuous(labels = comma) +
+  labs(
+    title = "Top 5 Parks That Experienced Most Visitor Growth Between 2019 and 2020",
+    subtitle = "Big Bend Ranch and Lake Somerville Birch Creek saw the largest rates of growth",
+    caption = "Visitation data provided by Texas Parks and Wildlife Department",
+    x = "Year",
+    y = "Total Visits",
+    color = "Park Site"
+  )
+```
+
+### Creating list for parks that lost the most visitors
+
+Pulled top 5 parks that lost the most visitors by arranging the percent difference column. Used the `%in%` and `pivot_longer` functions. Filtered out the percent change rows because the goal is to plot this data.
+
+
+```{r top-losers}
+top_parks_lose <- c("INDIAN LODGE", "RAY ROBERTS - GREENBELT","BIG SPRING STATE PARK", "LAKE CASA BLANCA STATE PARK", "BONHAM STATE PARK" )
+
+top_losers <- visits_change %>% 
+filter(park_site %in% top_parks_lose) %>% 
+pivot_longer(!park_site, names_to = "yr", values_to = "total_visits") %>% 
+  filter(yr != "diff_19_20")
+
+top_losers
+```
+
+## Plot top 5 biggest losers
+
+Creating a line chart over the years that shows the largest decline in visitors to these 5 parks during the beginning of the pandemic. Visits are pulled from total visits.
+
+```{r losers-plot}
+top_losers %>% 
+  ggplot(aes(x = yr, y = total_visits)) +
+  geom_line(aes(group = park_site, color = as.character(park_site))) +
+  scale_y_continuous(labels = comma) +
+  labs(
+    title = "Top 5 Parks That Experienced Visitor Decline Between 2019 and 2020",
+    subtitle = "Indian Lodge and Ray Roberts-Greenbelt saw largest percentage decreases",
+    caption = "Visitation data provided by Texas Parks and Wildlife Department",
+    x = "Year",
+    y = "Total Visits",
+    color = "Park Site"
+  )
+```
+
+## Finding out which parks saw greatest rise in camping 
+
+LBJ State Historic Site, Lake Somerville Birch Creek, and Lake Whitney State Park
+
+```{r camping}
+camping_change <- park_visits %>% 
+  group_by(park_site, yr) %>% 
+  summarize(
+    camp_visits = sum(overnight_visits) %>% round()
+  ) %>% 
+  pivot_wider(names_from = yr, values_from = camp_visits) %>% 
+  mutate(
+    diff_19_20 = ((`2020` - `2019`) / `2019`) * 100
+  ) %>% 
+  arrange(diff_19_20 %>% desc()) %>% 
+  filter(diff_19_20 != "-100")
+
+camping_change
+```
+
+
