@@ -1,0 +1,205 @@
+---
+title: "Import/clean"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Setup
+
+```{r setup}
+library(tidyverse)
+library(janitor)
+library(readxl)
+library(lubridate)
+```
+
+## Hand-managing the data
+
+Monthly visitation data from Texas Parks and Wildlife Department. Received data via Public Information Request on October 6, 2021. Point of contact is D'Lisa Mcintosh at TPWD. Data begins fiscal year 2016, ends fiscal year 2021. Each fiscal year starts with September, ends with August.
+
+[Raw data came in the form of Excel spreadsheets](https://drive.google.com/drive/folders/1cpPogR8EDrhceL1ZRIkOxc1sel8dEi78?usp=sharing), but it was difficult to work with and import. I then created my own Excel sheets for each year using only the 'Day Visits' totals and cleaned up the column names, so it would be easier to import and combine. I made sure the order of the column names was identical for every sheet.
+
+
+## Try combining Excel sheets for 2016
+
+Note: Fiscal year, not calendar year. Fiscal years start in September, end in August.
+
+```{r 2016}
+# set path to data
+## change name to update to new file
+path_2016 <- "data-raw/2016_visits_clean.xlsx"
+
+# import and combine sheets
+visits_2016 <- path_2016 %>%
+  excel_sheets() %>%
+  set_names() %>% 
+  map_df(~ read_excel(path = path_2016, sheet = .x), .id = "sheet") %>% 
+  clean_names()
+
+prev_mo = c("September", "October", "November", "December")
+
+visits_2016_yrmo <- visits_2016 %>% 
+  mutate(
+    yr = case_when(
+      sheet %in% prev_mo ~ "2015",
+      TRUE ~ "2016"
+    ),
+    yrmo = paste(sheet, yr, sep = " "),
+    date = my(yrmo),
+    mo = month(date, label = TRUE)
+  ) %>% 
+  select(yr, mo, everything(), -sheet, -date)
+
+visits_2016_yrmo
+```
+
+## Combining sheets for 2017
+
+```{r 2017}
+path_2017 <- "data-raw/2017_visits_clean.xlsx"
+
+visits_2017 <- path_2017 %>%
+  excel_sheets() %>%
+  set_names() %>% 
+  map_df(~ read_excel(path = path_2017, sheet = .x), .id = "sheet") %>% 
+  clean_names()
+
+visits_2017_yrmo <- visits_2017 %>% 
+  mutate(
+    yr = case_when(
+      sheet %in% prev_mo ~ "2016",
+      TRUE ~ "2017"
+    ),
+    yrmo = paste(sheet, yr, sep = " "),
+    date = my(yrmo),
+    mo = month(date, label = TRUE)
+  ) %>% 
+  select(yr, mo, everything(), -sheet, -date)
+  
+visits_2017_yrmo
+```
+
+## Combining sheets for 2018
+
+```{r 2018}
+path_2018 <- "data-raw/2018_visits_clean.xlsx"
+
+visits_2018 <- path_2018 %>%
+  excel_sheets() %>%
+  set_names() %>% 
+  map_df(~ read_excel(path = path_2018, sheet = .x), .id = "sheet") %>% 
+  clean_names()
+
+visits_2018_yrmo <- visits_2018 %>% 
+  mutate(
+    yr = case_when(
+      sheet %in% prev_mo ~ "2017",
+      TRUE ~ "2018"
+    ),
+    yrmo = paste(sheet, yr, sep = " "),
+    date = my(yrmo),
+    mo = month(date, label = TRUE)
+  ) %>% 
+  select(yr, mo, everything(), -sheet, -date)
+
+visits_2018_yrmo
+```
+
+## Combining sheets for 2019
+
+```{r 2019}
+path_2019 <- "data-raw/2019_visits_clean.xlsx"
+
+visits_2019 <- path_2019 %>%
+  excel_sheets() %>%
+  set_names() %>% 
+  map_df(~ read_excel(path = path_2019, sheet = .x), .id = "sheet") %>% 
+  clean_names()
+
+visits_2019_yrmo <- visits_2019 %>% 
+  mutate(
+    yr = case_when(
+      sheet %in% prev_mo ~ "2018",
+      TRUE ~ "2019"
+    ),
+    yrmo = paste(sheet, yr, sep = " "),
+    date = my(yrmo),
+    mo = month(date, label = TRUE)
+  ) %>% 
+  select(yr, mo, everything(), -sheet, -date)
+
+visits_2019_yrmo
+```
+
+## Combining sheets for 2020
+
+```{r 2020}
+path_2020 <- "data-raw/2020_visits_clean.xlsx"
+
+visits_2020 <- path_2020 %>%
+  excel_sheets() %>%
+  set_names() %>% 
+  map_df(~ read_excel(path = path_2020, sheet = .x), .id = "sheet") %>% 
+  clean_names()
+
+visits_2020_yrmo <- visits_2020 %>% 
+  mutate(
+    yr = case_when(
+      sheet %in% prev_mo ~ "2019",
+      TRUE ~ "2020"
+    ),
+    yrmo = paste(sheet, yr, sep = " "),
+    date = my(yrmo),
+    mo = month(date, label = TRUE)
+  ) %>% 
+  select(yr, mo, everything(), -sheet, -date)
+
+visits_2020_yrmo
+```
+
+## Combining sheets for 2021
+
+```{r 2021}
+path_2021 <- "data-raw/2021_visits_clean.xlsx"
+
+visits_2021 <- path_2021 %>%
+  excel_sheets() %>%
+  set_names() %>% 
+  map_df(~ read_excel(path = path_2021, sheet = .x), .id = "sheet") %>% 
+  clean_names()
+
+
+visits_2021_yrmo <- visits_2021 %>% 
+  mutate(
+    yr = case_when(
+      sheet %in% prev_mo ~ "2020",
+      TRUE ~ "2021"
+    ),
+    yrmo = paste(sheet, yr, sep = " "),
+    date = my(yrmo),
+    mo = month(date, label = TRUE)
+  ) %>% 
+  select(yr, mo, everything(), -sheet, -date)
+
+visits_2021_yrmo
+```
+
+## Bind rows
+
+Combining tables for fiscal years 2016, 2017, 2018, 2019, 2020, and 2021 into one. FY for "fiscal year"
+
+```{r bind}
+data_bind <- bind_rows("FY2016" = visits_2016_yrmo, "FY2017" = visits_2017_yrmo, "FY2018" = visits_2018_yrmo, "FY2019" = visits_2019_yrmo, "FY2020" = visits_2020_yrmo, "FY2021" = visits_2021_yrmo, .id = "fiscal_year")
+
+data_bind %>% glimpse()
+```
+
+## Export the data
+
+For later use in analysis notebook.
+
+```{r export}
+data_bind %>% write_rds("data-processed/01-tpwd-visits.rds")
+```
+
